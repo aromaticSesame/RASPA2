@@ -67,11 +67,11 @@ stamp-h.in
 *.pyc
 *.egg-info
 dist
+#Eclipse
+.settings/
 confdefs.h
-.settings/org.eclipse.cdt.managedbuilder.core.prefs
-.settings/org.eclipse.cdt.codan.core.prefs
-.settings/language.settings.xml
 .project
 .cproject
 .autotools
-.settings/org.eclipse.cdt.ui.prefs
+#VS Code
+src/.vscode/
