@@ -156,6 +156,7 @@ static REAL **UExclusionConstraintsAccumulated;
 static REAL **UTotalAccumulated;
 
 static REAL ***NumberOfIntegerMoleculesPerComponentAccumulated;
+static REAL ***FractionOfComponentInSystemAccumulated; //@K.L. added term
 static REAL ***NumberOfFractionalMoleculesPerComponentAccumulated;
 static REAL ***NumberOfExcessMoleculesPerComponentAccumulated;
 static REAL ***DensityPerComponentAccumulated;
@@ -178,6 +179,7 @@ static REAL **InverseDensityAccumulated;
 static REAL **GibbsInverseDensityAccumulated;
 static REAL ***GibbsInverseDensityPerComponentAccumulated;
 
+//@K.L. Accumulated vectors indexed by [system][block]
 static VECTOR **BoxAccumulated;
 static REAL **BoxAXAccumulated;
 static REAL **BoxAYAccumulated;
@@ -1017,6 +1019,7 @@ void InitializesEnergyAveragesAllSystems(void)
       {
         GibbsInverseDensityPerComponentAccumulated[k][j][i]=0.0;
         NumberOfIntegerMoleculesPerComponentAccumulated[k][j][i]=0.0;
+        FractionOfComponentInSystemAccumulated[k][j][i]=0.0;
         NumberOfFractionalMoleculesPerComponentAccumulated[k][j][i]=0.0;
         NumberOfExcessMoleculesPerComponentAccumulated[k][j][i]=0.0;
         DensityPerComponentAccumulated[k][j][i]=0.0;
@@ -1271,6 +1274,16 @@ void UpdateEnergyAveragesCurrentSystem(void)
                    TotalNumberOfIntegerAdsorbates());
 
     nr=NumberOfUnitCells[0].x*NumberOfUnitCells[0].y*NumberOfUnitCells[0].z;
+
+    /* @K.L. calculating total number of molecules for computing component fraction */
+    int TotalNumberOfMolecules=0;
+    for (i=0;i<NumberOfComponents;i++)
+    {
+      TotalNumberOfMolecules+= (Components[i].NumberOfMolecules[CurrentSystem]
+		              -(Components[i].FractionalMolecule[CurrentSystem]>=0?1:0)
+		              -Components[i].NumberOfRXMCMoleculesPresent[CurrentSystem]);
+    }
+
     for(i=0;i<NumberOfComponents;i++)
     {
       REAL loading_i = (Components[i].NumberOfMolecules[CurrentSystem]
@@ -1296,6 +1309,12 @@ void UpdateEnergyAveragesCurrentSystem(void)
       NumberOfFractionalMoleculesPerComponentAccumulated[CurrentSystem][i][Block]+=(Components[i].FractionalMolecule[CurrentSystem]>=0?1.0:0.0);
       NumberOfExcessMoleculesPerComponentAccumulated[CurrentSystem][i][Block]+=
                weight*numberOfExcessIntegerMoleculesForComponent;
+
+      /*@K.L. adding composition accumulation
+       *TODO Composition currently does not support fractional molecules--should it support though? read CFCMC
+       */
+      FractionOfComponentInSystemAccumulated[CurrentSystem][i][Block]+=weight*(numberOfAbsoluteIntegerMoleculesForComponent/(double)TotalNumberOfMolecules);
+
 
       densityForComponent=Components[i].Mass*(REAL)numberOfAbsoluteIntegerMoleculesForComponent/Volume[CurrentSystem];
       DensityPerComponentAccumulated[CurrentSystem][i][Block]+=weight*densityForComponent;
@@ -3404,8 +3423,8 @@ void PrintEnergies(FILE *FilePtr,char *string,char *units,REAL conv_factor,REAL 
 void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
 {
   int i,j,k1,k2,nr;
-  REAL sum,sum_vdw,sum_coul,tmp;
-  REAL sum2,sum_vdw2,sum_coul2;
+  REAL sum,sum_frac,sum_vdw,sum_coul,tmp;
+  REAL sum2,sum2_frac,sum_vdw2,sum_coul2;
   REAL CationMass,Mass;
   REAL vol,dipole_norm,dipole_norm_squared;
   REAL nr_molecules;
@@ -3444,7 +3463,7 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
 
   sum=sum2=0.0;
   CationMass=0.0;
-  for(j=0;j<NumberOfComponents;j++)
+  for(j=0;j<NumberOfComponents;j++) //@K.L. not for print-out, just for calculating cation mass.
   {
     if(Components[j].ExtraFrameworkMolecule)
     {
@@ -4424,7 +4443,7 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
   PrintProperty(FilePtr,"Total energy:\n=============\n",
                 "[K]",ENERGY_TO_KELVIN,UTotalAccumulated);
 
-  // Number of molecules
+  // xxx Number of molecules
   fprintf(FilePtr,"\n");
   fprintf(FilePtr,"Number of molecules:\n");
   fprintf(FilePtr,"====================\n\n");
@@ -4435,14 +4454,17 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
     fprintf(FilePtr,"-------------------------------------------------------------\n");
 
     // absolute adsorption
-    sum=sum_vdw=sum_coul=0.0;
-    sum2=sum_vdw2=sum_coul2=0.0;
+    sum=sum_vdw=sum_coul=sum_frac=0.0;
+    sum2=sum_vdw2=sum_coul2=sum2_frac=0.0;
     for(i=0;i<NR_BLOCKS;i++)
     {
       if(BlockWeightedCount[CurrentSystem][i]>0.0)
       {
         sum+=NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i];
+        sum_frac+=FractionOfComponentInSystemAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i];
+
         sum2+=SQR(NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]);
+        sum2+=SQR(FractionOfComponentInSystemAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]);
 
         fprintf(FilePtr,"\tBlock[%2d] %-18.5lf [-]\n",i,
                 (double)(NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]));
@@ -4455,6 +4477,10 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
     nr=NumberOfUnitCells[0].x*NumberOfUnitCells[0].y*NumberOfUnitCells[0].z;
     fprintf(FilePtr,"\tAverage                                %18.10lf +/- %18.10lf [-]\n",
       (double)(sum/(REAL)NR_BLOCKS),(double)(2.0*sqrt(fabs((sum2/(REAL)NR_BLOCKS)-SQR(sum)/(REAL)SQR(NR_BLOCKS)))));
+    //@K.L. adding output for mol fraction statistics
+    fprintf(FilePtr,"\tFraction                                %18.10lf +/- %18.10lf [-]\n",
+	(double)(sum/(REAL)NR_BLOCKS), (double)(2.0*sqrt(fabs((sum2_frac/(REAL)NR_BLOCKS)-SQR(sum_frac)/(REAL)SQR(NR_BLOCKS)))));
+
     fprintf(FilePtr,"\tAverage loading absolute [molecules/unit cell]  %18.10lf +/- %18.10lf [-]\n",
       (double)(sum/((REAL)nr*(REAL)NR_BLOCKS)),
       (double)(2.0*sqrt(fabs((sum2/(REAL)NR_BLOCKS)-SQR(sum)/(REAL)SQR(NR_BLOCKS)))/(REAL)nr));
@@ -4487,7 +4513,7 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
         sum2+=SQR(NumberOfExcessMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]);
 
         fprintf(FilePtr,"\tBlock[%2d] %-18.5lf [-]\n",i,
-                (double)(NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]));
+                (double)(NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i])); //@K.L. TODO BUG?IntegerMoleculePer
       }
       else
         fprintf(FilePtr,"\tBlock[%2d] %-18.5lf [-]\n",i,(double)0.0);
@@ -4992,6 +5018,7 @@ void WriteRestartStatistics(FILE *FilePtr)
       fwrite(AdsorbateAdsorbateEnergyTimesNumberOfMoleculesAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
 
       fwrite(NumberOfIntegerMoleculesPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
+      fwrite(FractionOfComponentInSystemAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);//@K.L. write fraction right after integer
       fwrite(NumberOfFractionalMoleculesPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
       fwrite(NumberOfExcessMoleculesPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
       fwrite(DensityPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
@@ -5189,6 +5216,7 @@ void AllocateStatisticsMemory(void)
   AdsorbateAdsorbateEnergyTimesNumberOfMoleculesAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL*));
 
   NumberOfIntegerMoleculesPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
+  FractionOfComponentInSystemAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
   NumberOfFractionalMoleculesPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
   NumberOfExcessMoleculesPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
   DensityPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
@@ -5371,6 +5399,7 @@ void AllocateStatisticsMemory(void)
     SurfaceAreaCount[i]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
 
     NumberOfIntegerMoleculesPerComponentAccumulated[i]=(REAL**)calloc(NumberOfComponents,sizeof(REAL*));
+    FractionOfComponentInSystemAccumulated[i]=(REAL**)calloc(NumberOfComponents,sizeof(REAL*));
     NumberOfFractionalMoleculesPerComponentAccumulated[i]=(REAL**)calloc(NumberOfComponents,sizeof(REAL*));
     NumberOfExcessMoleculesPerComponentAccumulated[i]=(REAL**)calloc(NumberOfComponents,sizeof(REAL*));
     DensityPerComponentAccumulated[i]=(REAL**)calloc(NumberOfComponents,sizeof(REAL*));
@@ -5408,6 +5437,7 @@ void AllocateStatisticsMemory(void)
       AdsorbateAdsorbateEnergyTimesNumberOfMoleculesAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
 
       NumberOfIntegerMoleculesPerComponentAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
+      FractionOfComponentInSystemAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
       NumberOfFractionalMoleculesPerComponentAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
       NumberOfExcessMoleculesPerComponentAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
       DensityPerComponentAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
@@ -5629,6 +5659,7 @@ void ReadRestartStatistics(FILE *FilePtr)
       fread(AdsorbateAdsorbateEnergyTimesNumberOfMoleculesAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
 
       fread(NumberOfIntegerMoleculesPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
+      fread(FractionOfComponentInSystemAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
       fread(NumberOfFractionalMoleculesPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
       fread(NumberOfExcessMoleculesPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);
       fread(DensityPerComponentAccumulated[i][j],sizeof(REAL),NumberOfBlocks,FilePtr);

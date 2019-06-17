@@ -80,6 +80,7 @@ extern size_t *FILE_SIZES = NULL;
  */
 char* run(char *inputData, char *inputCrystal, char *raspaDir, bool stream)
 {
+  fprintf(stderr, "Note: you are using the edited version of Raspa2. Branch: osmotics_version_GEMC. \n"); //@K.L. xxx A mark of using the edited RASPA
   int i = 0, j = 0, k = 0, maxAtomsBonds = 0;
   size_t chars = 0;
   REAL energy, force_factor;
