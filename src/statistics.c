@@ -156,7 +156,8 @@ static REAL **UExclusionConstraintsAccumulated;
 static REAL **UTotalAccumulated;
 
 static REAL ***NumberOfIntegerMoleculesPerComponentAccumulated;
-static REAL ***FractionOfComponentInSystemAccumulated; //@K.L. added term
+static REAL ***FractionOfComponentInSystemAccumulated; //@K.L. added term for mol fraction calculation
+
 static REAL ***NumberOfFractionalMoleculesPerComponentAccumulated;
 static REAL ***NumberOfExcessMoleculesPerComponentAccumulated;
 static REAL ***DensityPerComponentAccumulated;
@@ -165,6 +166,9 @@ static REAL ***TotalEnergyTimesNumberOfMoleculesPerComponentAccumulated;
 static REAL ***HostAdsorbateEnergyTimesNumberOfMoleculesAccumulated;
 static REAL ***AdsorbateAdsorbateEnergyTimesNumberOfMoleculesAccumulated;
 
+//An array storing N_total for each system to calculate mol fraction.
+//Variable for reducing redundant calculation. This is updated under UpdateEnergyAvgCurrentSystem.
+static int *TotalNumberOfMolecules;
 
 static VECTOR **TotalSystemDipoleAccumulated;
 static VECTOR **TotalSystemDipoleSquaredAccumulated;
@@ -893,6 +897,9 @@ void InitializesEnergiesCurrentSystem(void)
   MaximumNumberOfRattleCyclesStage1[CurrentSystem]=0;
   NumberOfRattleCyclesStage2[CurrentSystem]=0.0;
   MaximumNumberOfRattleCyclesStage2[CurrentSystem]=0;
+
+  //K.L. new variable for mol fraction calculation: TotalNumberOfMolecules
+  TotalNumberOfMolecules[CurrentSystem]=0;
 }
 
 void InitializesEnergyAveragesAllSystems(void)
@@ -1112,6 +1119,8 @@ void InitializesEnergyAveragesAllSystems(void)
 
 }
 
+
+
 void UpdateEnergyAveragesCurrentSystem(void)
 {
   int i,j,nr;
@@ -1276,10 +1285,10 @@ void UpdateEnergyAveragesCurrentSystem(void)
     nr=NumberOfUnitCells[0].x*NumberOfUnitCells[0].y*NumberOfUnitCells[0].z;
 
     /* @K.L. calculating total number of molecules for computing component fraction */
-    int TotalNumberOfMolecules=0;
+    TotalNumberOfMolecules[CurrentSystem]=0;
     for (i=0;i<NumberOfComponents;i++)
     {
-      TotalNumberOfMolecules+= (Components[i].NumberOfMolecules[CurrentSystem]
+      TotalNumberOfMolecules[CurrentSystem]+= (Components[i].NumberOfMolecules[CurrentSystem]
 		              -(Components[i].FractionalMolecule[CurrentSystem]>=0?1:0)
 		              -Components[i].NumberOfRXMCMoleculesPresent[CurrentSystem]);
     }
@@ -3107,17 +3116,20 @@ void PrintIntervalStatusProduction(long long CurrentCycle,long long NumberOfCycl
     fprintf(FilePtr,"----------------------------------------------------------------------------------------------------------------------------------------------------\n");
     for(i=0;i<NumberOfComponents;i++)
     {
-      fprintf(FilePtr,"Component %d (%s), current number of integer/fractional/reaction molecules: %d/%d/%d (average %9.5lf/%9.5lf), density: %9.5lf (average %9.5lf) kg/m^3]\n",
+      int NumberOfMolecules=Components[i].NumberOfMolecules[CurrentSystem]-(Components[i].FractionalMolecule[CurrentSystem]>=0?1:0)-Components[i].NumberOfRXMCMoleculesPresent[CurrentSystem];
+      fprintf(FilePtr,"Component %d (%s), current number of integer/fractional/reaction molecules: %d/%d/%d (average %9.5lf/%9.5lf), density: %9.5lf (average %9.5lf) kg/m^3]; current mol fraction=%9.5lf\n",
         i,
         Components[i].Name,
-        Components[i].NumberOfMolecules[CurrentSystem]-(Components[i].FractionalMolecule[CurrentSystem]>=0?1:0)-Components[i].NumberOfRXMCMoleculesPresent[CurrentSystem],
+        NumberOfMolecules,
         (Components[i].FractionalMolecule[CurrentSystem]>=0?1:0),
         Components[i].NumberOfRXMCMoleculesPresent[CurrentSystem],
         (double)(GetAverageWeightedComponentProperty(NumberOfIntegerMoleculesPerComponentAccumulated,i)/(REAL)number_of_unit_cells),
         (double)GetAverageComponentProperty(NumberOfFractionalMoleculesPerComponentAccumulated,i),
-        (double)((Components[i].Mass*(REAL)(Components[i].NumberOfMolecules[CurrentSystem]-(Components[i].FractionalMolecule[CurrentSystem]>=0?1:0)-Components[i].NumberOfRXMCMoleculesPresent[CurrentSystem])/
+        (double)((Components[i].Mass*(REAL)(NumberOfMolecules)/
                  Volume[CurrentSystem])*DENSITY_CONVERSION_FACTOR),
-        (double)(GetAverageWeightedComponentProperty(DensityPerComponentAccumulated,i)*DENSITY_CONVERSION_FACTOR));
+        (double)(GetAverageWeightedComponentProperty(DensityPerComponentAccumulated,i)*DENSITY_CONVERSION_FACTOR),
+	NumberOfMolecules/(double)TotalNumberOfMolecules[CurrentSystem] //add current mol fraction
+	);
       if(Components[i].CFMoleculePresent[CurrentSystem])
       {
         char FractionalMoleculeString[6];
@@ -4464,7 +4476,7 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
         sum_frac+=FractionOfComponentInSystemAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i];
 
         sum2+=SQR(NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]);
-        sum2+=SQR(FractionOfComponentInSystemAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]);
+        sum2_frac+=SQR(FractionOfComponentInSystemAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]);
 
         fprintf(FilePtr,"\tBlock[%2d] %-18.5lf [-]\n",i,
                 (double)(NumberOfIntegerMoleculesPerComponentAccumulated[CurrentSystem][j][i]/BlockWeightedCount[CurrentSystem][i]));
@@ -4479,7 +4491,7 @@ void PrintAverageTotalSystemEnergiesMC(FILE *FilePtr)
       (double)(sum/(REAL)NR_BLOCKS),(double)(2.0*sqrt(fabs((sum2/(REAL)NR_BLOCKS)-SQR(sum)/(REAL)SQR(NR_BLOCKS)))));
     //@K.L. adding output for mol fraction statistics
     fprintf(FilePtr,"\tFraction                                %18.10lf +/- %18.10lf [-]\n",
-	(double)(sum/(REAL)NR_BLOCKS), (double)(2.0*sqrt(fabs((sum2_frac/(REAL)NR_BLOCKS)-SQR(sum_frac)/(REAL)SQR(NR_BLOCKS)))));
+	(double)(sum_frac/(REAL)NR_BLOCKS), (double)(2.0*sqrt(fabs((sum2_frac/(REAL)NR_BLOCKS)-SQR(sum_frac)/(REAL)SQR(NR_BLOCKS)))));
 
     fprintf(FilePtr,"\tAverage loading absolute [molecules/unit cell]  %18.10lf +/- %18.10lf [-]\n",
       (double)(sum/((REAL)nr*(REAL)NR_BLOCKS)),
@@ -5217,6 +5229,7 @@ void AllocateStatisticsMemory(void)
 
   NumberOfIntegerMoleculesPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
   FractionOfComponentInSystemAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
+  TotalNumberOfMolecules=(int*)calloc(NumberOfSystems,sizeof(int));
   NumberOfFractionalMoleculesPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
   NumberOfExcessMoleculesPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
   DensityPerComponentAccumulated=(REAL***)calloc(NumberOfSystems,sizeof(REAL**));
@@ -5241,6 +5254,7 @@ void AllocateStatisticsMemory(void)
 
   NumberOfMoleculesPerComponentSquaredAccumulated=(REAL****)calloc(NumberOfSystems,sizeof(REAL***));
 
+  //allocate memory for array --each system
   for(i=0;i<NumberOfSystems;i++)
   {
     BlockWeightedCount[i]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
@@ -5430,6 +5444,7 @@ void AllocateStatisticsMemory(void)
 
     NumberOfMoleculesPerComponentSquaredAccumulated[i]=(REAL***)calloc(NumberOfComponents,sizeof(REAL**));
 
+    //allocate memory for array --per component
     for(j=0;j<NumberOfComponents;j++)
     {
       TotalEnergyTimesNumberOfMoleculesPerComponentAccumulated[i][j]=(REAL*)calloc(NumberOfBlocks,sizeof(REAL));
