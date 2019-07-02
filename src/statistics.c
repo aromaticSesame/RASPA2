@@ -1324,8 +1324,11 @@ void UpdateEnergyAveragesCurrentSystem(void)
       /*@K.L. adding composition accumulation
        *TODO Composition currently does not support fractional molecules--should it support though? read CFCMC
        */
-      FractionOfComponentInSystemAccumulated[CurrentSystem][i][Block]+=weight*(numberOfAbsoluteIntegerMoleculesForComponent/(double)TotalNumberOfMolecules[CurrentSystem]);
-
+      if (TotalNumberOfMolecules[CurrentSystem]==0){
+	fprintf(stderr,"Warning. No molecules in the system at Cycle #%2d. If this warning appears when you need fraction value, it is not accurate and please wait for incoming patch.\n",CurrentCycle);
+      }else{
+	FractionOfComponentInSystemAccumulated[CurrentSystem][i][Block]+=weight*(numberOfAbsoluteIntegerMoleculesForComponent/(double)TotalNumberOfMolecules[CurrentSystem]);
+      }
 
       densityForComponent=Components[i].Mass*(REAL)numberOfAbsoluteIntegerMoleculesForComponent/Volume[CurrentSystem];
       DensityPerComponentAccumulated[CurrentSystem][i][Block]+=weight*densityForComponent;
