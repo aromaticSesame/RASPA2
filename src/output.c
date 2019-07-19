@@ -6688,7 +6688,7 @@ void PrintPostSimulationStatus(void)
     PrintEnergyStatus(FilePtr,"full final energy");
     PrintEnergyDriftStatus(FilePtr);
 
-    PrintAverageTotalSystemEnergiesMC(FilePtr);
+    PrintAverageTotalSystemEnergiesMC(FilePtr); //@K.L. Printing average properties (statistics) for current system
 
     fprintf(FilePtr,"\nSimulation finished,  %d warnings\n",NumberOfWarnings[CurrentSystem]);
     PrintWarningStatus();

@@ -1321,8 +1321,8 @@ void UpdateEnergyAveragesCurrentSystem(void)
       NumberOfExcessMoleculesPerComponentAccumulated[CurrentSystem][i][Block]+=
                weight*numberOfExcessIntegerMoleculesForComponent;
 
-      /*@K.L. adding composition accumulation
-       *TODO Composition currently does not support fractional molecules--should it support though? read CFCMC
+      /*@K.L. adding mol fraction accumulation
+       *TODO read CFCMC
        */
       if (TotalNumberOfMolecules[CurrentSystem]==0){
 	fprintf(stderr,"Warning. No molecules in the system at Cycle #%2d. If this warning appears when you need fraction value, it is not accurate and please wait for incoming patch.\n",CurrentCycle);
