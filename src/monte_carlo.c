@@ -983,7 +983,7 @@ void MonteCarloSimulation(void)
         if(Movies[CurrentSystem]&&(CurrentCycle%WriteMoviesEvery[CurrentSystem]==0))
           SamplePDBMovies(PRINT,-1);
       }
-    }
+    }//end of for loop : numberOfCycles  (production stage)
 
     SimulationStage=FINISHED;
 
