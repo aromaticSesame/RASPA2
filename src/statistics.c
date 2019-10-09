@@ -1356,8 +1356,7 @@ void UpdateEnergyAveragesCurrentSystem(void)
     TemperatureFrameworkAccumulated[CurrentSystem][Block]+=weight*(2.0*UHostKinetic[CurrentSystem]/
                                                (K_B*DegreesOfFreedomFramework[CurrentSystem]));
 
-    //NumberOfMolecules=TotalNumberOfIntegerMolecules(); code deleted due to its ambiguity; using TotalNumberOfMolecules[CurrentSystem] instead
-
+    //@K.L. NumberOfMolecules=TotalNumberOfIntegerMolecules(); code deleted due to its ambiguity; using TotalNumberOfMolecules[CurrentSystem] instead
     if(ComputeMolecularPressure[CurrentSystem])
     {
       ComputeMolecularPressureTensor(&MolecularStressTensor[CurrentSystem],&PressureIdealGas,&PressureTail);
